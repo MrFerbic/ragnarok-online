@@ -93,6 +93,47 @@ easy-ro-docker/
 └── README.md
 ```
 
+## 🧩 Setup the Game Client
+1. Download the latest English RO client from the [ROClient_en GitHub Repository.](https://github.com/hiphop9/ROClient_en)
+
+2. Download the Full Client (~3.9 GB) and the patched EXE.
+
+3. Extract the client and and put patched client exe along with other client executables
+
+4. Open data/clientinfo.xml in your downloaded client app and configure it to connect to your server:
+
+```xml
+<?xml version="1.0" encoding="euc-kr" ?>
+<clientinfo>
+  <desc>Ragnarok Client Information</desc>
+  <servicetype>korea</servicetype>
+  <servertype>primary</servertype>
+  <connection>
+    <display>Local</display>
+    <address>192.168.0.102</address>
+    <port>6900</port>
+    <version>55</version>
+    <langtype>1</langtype>
+    <registrationweb>http://192.168.0.102:5023</registrationweb>
+    <loading>
+      <image>loading00.jpg</image>
+      <image>loading01.jpg</image>
+      <image>loading02.jpg</image>
+      <image>loading03.jpg</image>
+      <image>loading04.jpg</image>
+      <image>loading05.jpg</image>
+      <image>loading06.jpg</image>
+    </loading>
+    <aid>
+      <admin>1</admin>
+      <admin>2000000</admin>
+    </aid>
+  </connection>
+</clientinfo>
+```
+
+
+
 ## ❤️ Credits
 
 - [rAthena](https://github.com/rathena/rathena)
