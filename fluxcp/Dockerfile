@@ -15,5 +15,11 @@ RUN git clone https://github.com/rathena/FluxCP.git .
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html
 
+COPY docker-entrypoint.sh /usr/local/bin/
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
+
 # Apache listens on port 80 by default
 EXPOSE 80

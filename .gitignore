@@ -1,1 +1,4 @@
 .env
+!mariadb/readme.txt
+mariadb/*
+rathena/data/.built

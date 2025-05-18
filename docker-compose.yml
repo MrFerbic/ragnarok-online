@@ -1,63 +1,82 @@
-version: "3.9"
+  version: "3.9"
 
-services:
-  rathena:
-    build: ./rathena
-    container_name: rathena
-    depends_on:
-      - db
-    environment:
-      - DB_HOST=db
-    ports:
-      - "6900:6900"
-      - "6121:6121"
-      - "5121:5121"
-    volumes:
-      - ./rathena:/opt/rathena
-    networks:
-      - ragnarok-online
+  services:
+    rathena:
+      image: rathena:0.0.1
+      container_name: ragnarok-online-rathena
+      depends_on:
+        - db
+      environment:
+        - MYSQL_HOST=db
+        - MYSQL_DB=ragnarok
+        - MYSQL_USER=ragnarok
+        - MYSQL_PWD=ragnarok
+        - MYSQL_DROP_DB=1
+        - BIND_IP=0.0.0.0
+        - SET_INTERSRV_USERID=ragnarok
+        - SET_INTERSRV_PASSWD=ragnarok
+        - SET_SERVER_NAME=TestServer
+        - SET_CHAR_TO_LOGIN_IP=192.168.0.102
+        - SET_CHAR_PUBLIC_IP=192.168.0.102
+        - SET_MAP_TO_CHAR_IP=192.168.0.102
+        - SET_MAP_PUBLIC_IP=192.168.0.102
+      ports:
+        - "6900:6900"
+        - "6121:6121"
+        - "5121:5121"
+        - "5122:8888"
+      volumes:
+        - /home/decky/Documents/works/others/ragnarok-online/rathena/data:/data
+      networks:
+        - ragnarok-online
 
-  db:
-    image: mariadb:10.6
-    container_name: mariadb
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: ragnarok
-      MYSQL_DATABASE: ragnarok
-      MYSQL_USER: ragnarok
-      MYSQL_PASSWORD: ragnarok
-    volumes:
-      - db_data:/var/lib/mysql
-    networks:
-      - ragnarok-online
+    db:
+      image: mariadb:10.6
+      container_name: ragnarok-online-mariadb
+      restart: always
+      environment:
+        MYSQL_ROOT_PASSWORD: ragnarok
+        MYSQL_DATABASE: ragnarok
+        MYSQL_USER: ragnarok
+        MYSQL_PASSWORD: ragnarok
+      volumes:
+        - /home/decky/Documents/works/others/ragnarok-online/mariadb:/var/lib/mysql
+      networks:
+        - ragnarok-online
 
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    container_name: phpmyadmin
-    environment:
-      PMA_HOST: db
-      MYSQL_ROOT_PASSWORD: ragnarok
-    ports:
-      - "8080:80"
-    depends_on:
-      - db
-    networks:
-      - ragnarok-online
+    phpmyadmin:
+      image: phpmyadmin/phpmyadmin
+      container_name: ragnarok-online-phpmyadmin
+      environment:
+        PMA_HOST: db
+        MYSQL_ROOT_PASSWORD: ragnarok
+      ports:
+        - "5124:80"
+      depends_on:
+        - db
+      networks:
+        - ragnarok-online
 
-  fluxcp:
-    build: ./fluxcp
-    container_name: fluxcp
-    ports:
-      - "80:80"
-    volumes:
-      - ./fluxcp:/var/www/html
-    depends_on:
-      - db
-    networks:
-      - ragnarok-online
+    fluxcp:
+      image: fluxcp:0.0.1
+      container_name: ragnarok-online-fluxcp
+      ports:
+        - "5123:80"
+      environment:        
+        - MYSQL_HOST=db
+        - MYSQL_DB=ragnarok
+        - MYSQL_USER=ragnarok
+        - MYSQL_PWD=ragnarok
+        - FLUXCP_HOST:192.168.0.102
+        - FLUXCP_INSTALLER_PASSWORD:ragnarok
+      depends_on:
+        - db
+        - rathena
+      networks:
+        - ragnarok-online
 
-volumes:
-  db_data:
+  volumes:
+    db_data:
 
-networks:
-  ragnarok-online:
+  networks:
+    ragnarok-online:
