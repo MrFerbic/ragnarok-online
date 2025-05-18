@@ -9,6 +9,10 @@ Welcome to **Easy RO Docker**, a fully containerized Ragnarok Online server setu
 
 ---
 
+## 🖼️ Preview
+
+![FluxCP Screenshot](assets/screenshoot01.jpg)
+
 ## 🚀 Getting Started
 
 ### 1. 📦 Install Docker
@@ -51,7 +55,6 @@ Make sure you set your IP, database passwords, rates, and packet version correct
 
 ### 5. 📡 Launch the Server
 
-
 ```bash
 docker compose up
 ```
@@ -65,11 +68,13 @@ That’s it! Your server should now be running with:
 🧪 phpMyAdmin on http://localhost:5124
 
 ## 🧹 Maintenance
+
 To stop and remove all containers:
 
 ```bash
 docker compose down
 ```
+
 To rebuild after making code/config changes:
 
 ```bash
@@ -77,6 +82,7 @@ docker compose build --no-cache
 ```
 
 📁 Folder Structure
+
 ```text
 easy-ro-docker/
 ├── rathena/             # Custom rAthena image & cache
@@ -89,18 +95,14 @@ easy-ro-docker/
 
 ## ❤️ Credits
 
-- rAthena
-
-- FluxCP
-
-- phpMyAdmin
-
-- Docker 🐋
-
-
+- [rAthena](https://github.com/rathena/rathena)
+- [FluxCP](https://github.com/rathena/FluxCP)
+- [phpMyAdmin](https://www.phpmyadmin.net/)
+- [Docker 🐋](https://www.docker.com/)
 
 ## Notes
-For firsttime run run this script using phpmyadmin to register an admin user
+
+For firsttime run, execute this script using phpmyadmin to register an admin user
 
 ```sql
 INSERT INTO `login` (`account_id`, `userid`, `user_pass`, `sex`, `email`, `group_id`, `state`, `unban_time`, `expiration_time`, `logincount`, `lastlogin`, `last_ip`, `birthdate`, `character_slots`, `pincode`, `pincode_change`, `vip_time`, `old_group`, `web_auth_token`, `web_auth_token_enabled`) VALUES
