@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="euc-kr" ?>
+<clientinfo>
+	<desc>Ragnarok Client Information</desc>
+	<servicetype>korea</servicetype>
+	<servertype>primary</servertype>
+	<connection>
+		<display>Local</display>
+		<address>192.168.0.102</address>
+		<port>6900</port>
+		<version>55</version>
+		<langtype>1</langtype>
+		<registrationweb>http://192.168.0.102:5023</registrationweb>
+		<loading>
+			<image>loading00.jpg</image>
+			<image>loading01.jpg</image>
+			<image>loading02.jpg</image>
+			<image>loading03.jpg</image>
+			<image>loading04.jpg</image>
+			<image>loading05.jpg</image>
+			<image>loading06.jpg</image>
+		</loading>
+		<aid>
+			<admin>1</admin>
+			<admin>2000000</admin>
+		</aid>
+   	</connection>
+</clientinfo>
