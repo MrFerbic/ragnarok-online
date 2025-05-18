@@ -8,18 +8,19 @@ RUN apt-get update && apt-get install -y \
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
-# Copy FluxCP source
+RUN mkdir -p /setup
+
+# Set working directory
+WORKDIR /setup
+
+# Add entrypoint
+COPY docker-entrypoint.sh /setup
+RUN chmod +x /setup/docker-entrypoint.sh
+
+# Create working directory
 WORKDIR /var/www/html
-RUN git clone https://github.com/rathena/FluxCP.git .
 
-# Set proper permissions
-RUN chown -R www-data:www-data /var/www/html && chmod -R 755 /var/www/html
-
-COPY docker-entrypoint.sh /usr/local/bin/
-
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-ENTRYPOINT ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "/setup/docker-entrypoint.sh"]
 
 # Apache listens on port 80 by default
 EXPOSE 80

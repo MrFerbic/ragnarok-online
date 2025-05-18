@@ -7,33 +7,30 @@ RUN apt-get install -y git make gcc g++ zlib1g-dev \
   default-mysql-client default-libmysqlclient-dev\
   procps
 
+# Clean instalation
 RUN apt-get clean
 
-# Using git pull method
-RUN git clone https://github.com/rathena/rathena.git /rAthena
-WORKDIR /rAthena
-RUN git checkout master
+# Create volume mount point
+VOLUME ["/rAthena"]
 
-# Using copied local rAthena source from monorepo
-# COPY rAthena /rAthena
-# WORKDIR /rAthena
+RUN mkdir -p /setup
 
-RUN mv conf/import-tmpl conf/import
-COPY accountsandchars.sql /
-COPY gab_npc.txt /rAthena/npc/custom/
+# Set working directory
+WORKDIR /setup
+
+COPY accountsandchars.sql /setup
+COPY gab_npc.txt /setup
+COPY docker-entrypoint.sh /setup
+COPY start-server.sh /setup
+
+RUN chmod +x /setup/docker-entrypoint.sh
+RUN chmod +x /setup/start-server.sh
 
 EXPOSE 6900/tcp 6121/tcp 5121/tcp
 
 # We pending the server make when container run later
 
-COPY docker-entrypoint.sh /usr/local/bin/
-
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
-ENTRYPOINT ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
-
-# Set working directory
-WORKDIR /rAthena
+ENTRYPOINT ["/bin/bash", "/setup/docker-entrypoint.sh"]
 
 # Allow container command override
-CMD ["/bin/bash", "/rAthena/athena-start", "watch"]
+CMD ["/bin/bash", "/setup/start-server.sh"]

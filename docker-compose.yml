@@ -34,17 +34,21 @@ services:
     ports:
       - "${FLUXCP_PORT:-5123}:80"
     environment:
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
+
       MYSQL_HOST: ${MYSQL_HOST:-db}
       MYSQL_DB: ${MYSQL_DATABASE:-ragnarok}
       MYSQL_USER: ${MYSQL_USER:-ragnarok}
       MYSQL_PWD: ${MYSQL_PASSWORD:-ragnarok}
+      
       FLUXCP_HOST: ${FLUXCP_HOST:-127.0.0.1}
       FLUXCP_INSTALLER_PASSWORD: ${FLUXCP_INSTALLER_PASSWORD:-ragnarok}
     depends_on:
       - db
       - phpmyadmin
     volumes:
-      - ${FLUXCP_CACHE:-./fluxcp/cache}:/cache
+      - ${FLUXCP_PATH:-./fluxcp/server}:/var/www/html
     networks:
       - ragnarok-online
 
@@ -56,6 +60,12 @@ services:
       - phpmyadmin
       - db
     environment:
+      RATHENA_REPO_URL: ${RATHENA_REPO_URL:-https://github.com/rathena/rathena.git}
+      RATHENA_BRANCH: ${RATHENA_BRANCH:-master}
+      RATHENA_COMMIT: ${RATHENA_COMMIT}
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
+
       MYSQL_HOST: ${MYSQL_HOST:-db}
       MYSQL_DB: ${MYSQL_DATABASE:-ragnarok}
       MYSQL_USER: ${MYSQL_USER:-ragnarok}
@@ -90,7 +100,7 @@ services:
       - "${PORT_MAP:-5121}:5121"
       - "${PORT_STATS:-5122}:8888"
     volumes:
-      - ${RATHENA_CACHE:-./rathena/cache}:/cache
+      - ${RATHENA_PATH:-./rathena/server}:/rAthena
     networks:
       - ragnarok-online
 

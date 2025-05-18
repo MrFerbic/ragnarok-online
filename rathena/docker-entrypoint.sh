@@ -19,30 +19,76 @@ echo "MySQL is up - continuing..."
 # Build Phase
 # ------------------------------------------------------
 RATHENA_DIR="/rAthena"
-BUILT_DIR="/cache"
 
-# Check if /cache is empty
-if [ -z "$(ls -A "$BUILT_DIR")" ]; then
-    echo "🛠️ First time setup: building rAthena..."
+# Functions
+log() {
+  echo -e "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
 
-    # Place your rAthena build commands here
+clone_repo() {
+  if [ ! -d "$RATHENA_DIR/.git" ]; then
+    log "📥 Initializing rAthena in existing directory..."
+
+    # Checkout repo
+    git config --global --add safe.directory "$RATHENA_DIR"
+    git init "$RATHENA_DIR"
+    cd "$RATHENA_DIR"
+    git remote add origin "$RATHENA_REPO_URL"
+    git fetch --depth 1 origin "$RATHENA_BRANCH"
+    git checkout "$RATHENA_COMMIT" || git checkout "$RATHENA_BRANCH"
+
+    # Fix server file ownership
+    if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then
+      echo "🔧 Fixing ownership of ${RATHENA_DIR} to ${HOST_UID}:${HOST_GID}"
+      chown -R "$HOST_UID:$HOST_GID" "$RATHENA_DIR"
+    fi
+  else
+    log "✅ rAthena repo already present"
+  fi
+}
+
+check_binaries() {
+  for bin in char-server login-server map-server web-server; do
+    if [ ! -f "$RATHENA_DIR/$bin" ]; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+build_rathena() {
+    log "🔧 Building rAthena..."
     cd "$RATHENA_DIR"
 
     PACKET_OBFUSCATION=1
 
-    if [ ${PACKET_OBFUSCATION} -neq 1 ]; then sed -i "s|#define PACKET_OBFUSCATION|//#define PACKET_OBFUSCATION|g" /rAthena/src/config/packets.hpp; fi
-    if [ ${PACKET_OBFUSCATION} -neq 1 ]; then sed -i "s|#define PACKET_OBFUSCATION_WARN|//#define PACKET_OBFUSCATION_WARN|g" /rAthena/src/config/packets.hpp; fi
+    if [ "${PACKET_OBFUSCATION}" -ne 1 ]; then sed -i "s|#define PACKET_OBFUSCATION|//#define PACKET_OBFUSCATION|g" "$RATHENA_DIR/src/config/packets.hpp"; fi
+    if [ "${PACKET_OBFUSCATION}" -ne 1 ]; then sed -i "s|#define PACKET_OBFUSCATION_WARN|//#define PACKET_OBFUSCATION_WARN|g" "$RATHENA_DIR/src/config/packets.hpp"; fi
 
     # Find where the libmysqlclient.so installed
     MYSQL_LIB_PATH=$(dpkg -S libmysqlclient.so | awk '{print $2}')
+
+    # Actual build process
     ./configure  --enable-packetver=${RATHENA_PACKETVER} --enable-64bit --with-MYSQL_LIBS="$MYSQL_LIB_PATH"
     make clean
     make server
+
+    # Finalize
     chmod a+x login-server char-server map-server web-server
-else
-    echo "♻️ Cached build found, restoring from $BUILT_DIR to $RATHENA_DIR"
-    cp -rT "$BUILT_DIR" "$RATHENA_DIR"
-fi
+}
+
+build_server() {
+  if check_binaries; then
+    log "✅ All required binaries already exist — skipping clone/build"
+  else
+    log "🛠️ Required binaries missing — proceeding to clone and build"
+    clone_repo
+    build_rathena
+  fi
+}
+
+build_server
+
 # ------------------------------------------------------
 
 # Proceed with MySQL setup and configuration
@@ -75,14 +121,20 @@ check_database_exist () {
 }
 
 setup_init () {
-    if ! [ -z "${SET_MOTD}" ]; then echo -e "${SET_MOTD}" > /rAthena/conf/motd.txt; fi
+    if ! [ -z "${SET_MOTD}" ]; then echo -e "${SET_MOTD}" > "$RATHENA_DIR/conf/motd.txt"; fi
+    
+    # Cleanup previous config
+    rm -rf "$RATHENA_DIR/conf/import"
+
+    # Copy import-tmpl to import
+    cp -r "$RATHENA_DIR/conf/import-tmpl" "$RATHENA_DIR/conf/import"
+
+    # Re-config everythings
     setup_mysql_config
     setup_config
     enable_custom_npc
     setup_rate
-
-    echo "📦 Caching build output to $BUILT_DIR"
-    cp -rT "$RATHENA_DIR" "$BUILT_DIR"
+    setup_extras
 }
 
 import_sql_files_in_order () {
@@ -112,48 +164,41 @@ setup_mysql_config () {
 
     echo "Setting up MySQL on Login Server..."
 
-    echo -e "use_sql_db: yes\n\n" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "login_server_ip: ${MYSQL_HOST}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "login_server_db: ${MYSQL_DB}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "login_server_id: ${MYSQL_USER}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "login_server_pw: ${MYSQL_PWD}\n" >> /rAthena/conf/import/inter_conf.txt
-
-
-    echo -e "use_sql_db: yes\n\n" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "login_server_ip: ${MYSQL_HOST}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "login_server_db: ${MYSQL_DB}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "login_server_id: ${MYSQL_USER}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "login_server_pw: ${MYSQL_PWD}\n" >> /rAthena/conf/import/inter_conf.txt
+    echo -e "use_sql_db: yes" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "login_server_ip: ${MYSQL_HOST}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "login_server_db: ${MYSQL_DB}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "login_server_id: ${MYSQL_USER}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "login_server_pw: ${MYSQL_PWD}\n" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
 
     echo "Setting up MySQL on Map Server..."
-    echo -e "map_server_ip: ${MYSQL_HOST}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "map_server_db: ${MYSQL_DB}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "map_server_id: ${MYSQL_USER}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "map_server_pw: ${MYSQL_PWD}\n" >> /rAthena/conf/import/inter_conf.txt
+    echo -e "map_server_ip: ${MYSQL_HOST}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "map_server_db: ${MYSQL_DB}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "map_server_id: ${MYSQL_USER}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "map_server_pw: ${MYSQL_PWD}\n" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
 
     echo "Setting up MySQL on Char Server..."
-    echo -e "char_server_ip: ${MYSQL_HOST}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "char_server_db: ${MYSQL_DB}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "char_server_id: ${MYSQL_USER}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "char_server_pw: ${MYSQL_PWD}\n" >> /rAthena/conf/import/inter_conf.txt
+    echo -e "char_server_ip: ${MYSQL_HOST}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "char_server_db: ${MYSQL_DB}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "char_server_id: ${MYSQL_USER}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "char_server_pw: ${MYSQL_PWD}\n" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
 
     echo "Setting up MySQL on IP ban..."
-    echo -e "ipban_db_ip: ${MYSQL_HOST}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "ipban_db_db: ${MYSQL_DB}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "ipban_db_id: ${MYSQL_USER}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "ipban_db_pw: ${MYSQL_PWD}\n" >> /rAthena/conf/import/inter_conf.txt
+    echo -e "ipban_db_ip: ${MYSQL_HOST}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "ipban_db_db: ${MYSQL_DB}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "ipban_db_id: ${MYSQL_USER}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "ipban_db_pw: ${MYSQL_PWD}\n" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
 
     echo "Setting up MySQL on log..."
-    echo -e "log_db_ip: ${MYSQL_HOST}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "log_db_db: ${MYSQL_DB}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "log_db_id: ${MYSQL_USER}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "log_db_pw: ${MYSQL_PWD}\n" >> /rAthena/conf/import/inter_conf.txt
+    echo -e "log_db_ip: ${MYSQL_HOST}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "log_db_db: ${MYSQL_DB}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "log_db_id: ${MYSQL_USER}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "log_db_pw: ${MYSQL_PWD}\n" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
 
     echo "Setting up MySQL on log..."
-    echo -e "web_server_ip: ${MYSQL_HOST}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "web_server_db: ${MYSQL_DB}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "web_server_id: ${MYSQL_USER}" >> /rAthena/conf/import/inter_conf.txt
-    echo -e "web_server_pw: ${MYSQL_PWD}\n" >> /rAthena/conf/import/inter_conf.txt
+    echo -e "web_server_ip: ${MYSQL_HOST}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "web_server_db: ${MYSQL_DB}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "web_server_id: ${MYSQL_USER}" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
+    echo -e "web_server_pw: ${MYSQL_PWD}\n" >> "$RATHENA_DIR/conf/import/inter_conf.txt"
 
     if ! [ -z ${MYSQL_DROP_DB} ]; then
         if [ ${MYSQL_DROP_DB} -ne 0 ]; then
@@ -170,7 +215,7 @@ setup_mysql_config () {
         mysql -u"${MYSQL_USER}" -p"${MYSQL_PWD}" -h "${MYSQL_HOST}" -e "CREATE DATABASE IF NOT EXISTS \`${MYSQL_DB}\`;"
 
         # Import each section in order
-        import_sql_files_in_order "/rAthena/sql-files"
+        import_sql_files_in_order "$RATHENA_DIR/sql-files"
 
 
         mysql -u${MYSQL_USER} -p${MYSQL_PWD} -h ${MYSQL_HOST} -D${MYSQL_DB} -e "UPDATE login SET userid = \"${SET_INTERSRV_USERID}\", user_pass = \"${SET_INTERSRV_PASSWD}\", group_id = 99 WHERE account_id = 1;"
@@ -183,50 +228,48 @@ setup_mysql_config () {
 
 setup_config () {
     if ! [ -z "${SET_INTERSRV_USERID}" ]; then 
-        echo -e "userid: ${SET_INTERSRV_USERID}" >> /rAthena/conf/import/map_conf.txt
-        echo -e "userid: ${SET_INTERSRV_USERID}" >> /rAthena/conf/import/char_conf.txt
+        echo -e "userid: ${SET_INTERSRV_USERID}" >> "$RATHENA_DIR/conf/import/map_conf.txt"
+        echo -e "userid: ${SET_INTERSRV_USERID}" >> "$RATHENA_DIR/conf/import/char_conf.txt"
     fi
     if ! [ -z "${SET_INTERSRV_PASSWD}" ]; then 
-        echo -e "passwd: ${SET_INTERSRV_PASSWD}" >> /rAthena/conf/import/map_conf.txt
-        echo -e "passwd: ${SET_INTERSRV_PASSWD}" >> /rAthena/conf/import/char_conf.txt
+        echo -e "passwd: ${SET_INTERSRV_PASSWD}" >> "$RATHENA_DIR/conf/import/map_conf.txt"
+        echo -e "passwd: ${SET_INTERSRV_PASSWD}" >> "$RATHENA_DIR/conf/import/char_conf.txt"
     fi
-
-    if ! [ -z "${BIND_IP}" ]; then echo -e "bind_ip: ${BIND_IP}" >> /rAthena/conf/web_athena.conf; fi
     
+    if ! [ -z "${SET_CHAR_TO_LOGIN_IP}" ]; then echo -e "login_ip: ${SET_CHAR_TO_LOGIN_IP}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_CHAR_PUBLIC_IP}" ]; then echo -e "char_ip: ${SET_CHAR_PUBLIC_IP}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${BIND_IP}" ]; then echo -e "bind_ip: ${BIND_IP}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
     
-    if ! [ -z "${SET_CHAR_TO_LOGIN_IP}" ]; then echo -e "login_ip: ${SET_CHAR_TO_LOGIN_IP}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_CHAR_PUBLIC_IP}" ]; then echo -e "char_ip: ${SET_CHAR_PUBLIC_IP}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${BIND_IP}" ]; then echo -e "bind_ip: ${BIND_IP}" >> /rAthena/conf/import/char_conf.txt; fi
-    
-    if ! [ -z "${SET_MAP_TO_CHAR_IP}" ]; then echo -e "char_ip: ${SET_MAP_TO_CHAR_IP}" >> /rAthena/conf/import/map_conf.txt; fi
-    if ! [ -z "${SET_MAP_PUBLIC_IP}" ]; then echo -e "map_ip: ${SET_MAP_PUBLIC_IP}" >> /rAthena/conf/import/map_conf.txt; fi
-    if ! [ -z "${BIND_IP}" ]; then echo -e "bind_ip: ${BIND_IP}" >> /rAthena/conf/import/map_conf.txt; fi
+    if ! [ -z "${SET_MAP_TO_CHAR_IP}" ]; then echo -e "char_ip: ${SET_MAP_TO_CHAR_IP}" >> "$RATHENA_DIR/conf/import/map_conf.txt"; fi
+    if ! [ -z "${SET_MAP_PUBLIC_IP}" ]; then echo -e "map_ip: ${SET_MAP_PUBLIC_IP}" >> "$RATHENA_DIR/conf/import/map_conf.txt"; fi
+    if ! [ -z "${BIND_IP}" ]; then echo -e "bind_ip: ${BIND_IP}" >> "$RATHENA_DIR/conf/import/map_conf.txt"; fi
 
+    if ! [ -z "${BIND_IP}" ]; then echo -e "bind_ip: ${BIND_IP}" >> "$RATHENA_DIR/conf/import/web_conf.txt"; fi
 
-    if ! [ -z "${ADD_SUBNET_MAP1}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP1}" >> /rAthena/conf/subnet_athena.conf; fi
-    if ! [ -z "${ADD_SUBNET_MAP2}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP2}" >> /rAthena/conf/subnet_athena.conf; fi
-    if ! [ -z "${ADD_SUBNET_MAP3}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP3}" >> /rAthena/conf/subnet_athena.conf; fi
-    if ! [ -z "${ADD_SUBNET_MAP4}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP4}" >> /rAthena/conf/subnet_athena.conf; fi
-    if ! [ -z "${ADD_SUBNET_MAP5}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP5}" >> /rAthena/conf/subnet_athena.conf; fi
+    if ! [ -z "${ADD_SUBNET_MAP1}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP1}" >> "$RATHENA_DIR/conf/subnet_athena.conf"; fi
+    if ! [ -z "${ADD_SUBNET_MAP2}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP2}" >> "$RATHENA_DIR/conf/subnet_athena.conf"; fi
+    if ! [ -z "${ADD_SUBNET_MAP3}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP3}" >> "$RATHENA_DIR/conf/subnet_athena.conf"; fi
+    if ! [ -z "${ADD_SUBNET_MAP4}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP4}" >> "$RATHENA_DIR/conf/subnet_athena.conf"; fi
+    if ! [ -z "${ADD_SUBNET_MAP5}" ]; then echo -e "subnet: ${ADD_SUBNET_MAP5}" >> "$RATHENA_DIR/conf/subnet_athena.conf"; fi
 
-    if ! [ -z "${SET_SERVER_NAME}" ]; then echo -e "server_name: ${SET_SERVER_NAME}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_MAX_CONNECT_USER}" ]; then echo -e "max_connect_user: ${SET_MAX_CONNECT_USER}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_START_ZENNY}" ]; then echo -e "start_zenny: ${SET_START_ZENNY}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_START_POINT}" ]; then echo -e "start_point: ${SET_START_POINT}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_START_POINT_PRE}" ]; then echo -e "start_point_pre: ${SET_START_POINT_PRE}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_START_POINT_DORAM}" ]; then echo -e "start_point_doram: ${SET_START_POINT_DORAM}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_START_ITEMS}" ]; then echo -e "start_items: ${SET_START_ITEMS}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_START_ITEMS_DORAM}" ]; then echo -e "start_items_doram: ${SET_START_ITEMS_DORAM}" >> /rAthena/conf/import/char_conf.txt; fi
-    if ! [ -z "${SET_PINCODE_ENABLED}" ]; then echo -e "pincode_enabled: ${SET_PINCODE_ENABLED}" >> /rAthena/conf/import/char_conf.txt; fi
+    if ! [ -z "${SET_SERVER_NAME}" ]; then echo -e "server_name: ${SET_SERVER_NAME}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_MAX_CONNECT_USER}" ]; then echo -e "max_connect_user: ${SET_MAX_CONNECT_USER}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_START_ZENNY}" ]; then echo -e "start_zenny: ${SET_START_ZENNY}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_START_POINT}" ]; then echo -e "start_point: ${SET_START_POINT}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_START_POINT_PRE}" ]; then echo -e "start_point_pre: ${SET_START_POINT_PRE}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_START_POINT_DORAM}" ]; then echo -e "start_point_doram: ${SET_START_POINT_DORAM}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_START_ITEMS}" ]; then echo -e "start_items: ${SET_START_ITEMS}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_START_ITEMS_DORAM}" ]; then echo -e "start_items_doram: ${SET_START_ITEMS_DORAM}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
+    if ! [ -z "${SET_PINCODE_ENABLED}" ]; then echo -e "pincode_enabled: ${SET_PINCODE_ENABLED}" >> "$RATHENA_DIR/conf/import/char_conf.txt"; fi
 
-    if ! [ -z "${SET_ALLOWED_REGS}" ]; then echo -e "allowed_regs: ${SET_ALLOWED_REGS}" >> /rAthena/conf/import/login_conf.txt; fi
-    if ! [ -z "${SET_TIME_ALLOWED}" ]; then echo -e "time_allowed: ${SET_TIME_ALLOWED}" >> /rAthena/conf/import/login_conf.txt; fi
+    if ! [ -z "${SET_ALLOWED_REGS}" ]; then echo -e "allowed_regs: ${SET_ALLOWED_REGS}" >> "$RATHENA_DIR/conf/import/login_conf.txt"; fi
+    if ! [ -z "${SET_TIME_ALLOWED}" ]; then echo -e "time_allowed: ${SET_TIME_ALLOWED}" >> "$RATHENA_DIR/conf/import/login_conf.txt"; fi
 
-    if ! [ -z "${SET_ARROW_DECREMENT}" ]; then echo -e "arrow_decrement: ${SET_ARROW_DECREMENT}" >> /rAthena/conf/import/battle_conf.txt; fi
+    if ! [ -z "${SET_ARROW_DECREMENT}" ]; then echo -e "arrow_decrement: ${SET_ARROW_DECREMENT}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"; fi
 }
 
 enable_custom_npc () {
-    echo -e "npc: npc/custom/gab_npc.txt" >> /rAthena/npc/scripts_custom.conf
+    echo -e "npc: npc/custom/gab_npc.txt" >> "$RATHENA_DIR/npc/scripts_custom.conf"
 }
 
 setup_rate () {
@@ -234,70 +277,83 @@ setup_rate () {
 
     # EXP rates
     if ! [ -z "${RATE_BASE_EXP}" ]; then
-        sed -i "s/^\s*base_exp_rate:.*$/base_exp_rate: ${RATE_BASE_EXP}/" /rAthena/conf/battle/exp.conf
+        echo -e "base_exp_rate: ${RATE_BASE_EXP}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
     if ! [ -z "${RATE_JOB_EXP}" ]; then
-        sed -i "s/^\s*job_exp_rate:.*$/job_exp_rate: ${RATE_JOB_EXP}/" /rAthena/conf/battle/exp.conf
+        echo -e "job_exp_rate: ${RATE_JOB_EXP}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
-    if ! [ -z "${ENABLE_MULTI_LEVEL_UP}" ]; then
-        sed -i "s/^\s*multi_level_up:.*$/multi_level_up: ${ENABLE_MULTI_LEVEL_UP}/" /rAthena/conf/battle/exp.conf
+    if ! [ -z "${ENABLE_MULTI_LEVEL_UP}" ]; then 
+        echo -e "multi_level_up: ${ENABLE_MULTI_LEVEL_UP}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
 
     # Drop rates
     if ! [ -z "${RATE_ITEM_DROP_COMMON}" ]; then
-        sed -i "s/^\s*item_rate_common:.*$/item_rate_common: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_common_boss:.*$/item_rate_common_boss: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_common_mvp:.*$/item_rate_common_mvp: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_common_min:.*$/item_rate_common_min: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_common_max:.*$/item_rate_common_max: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
+        echo -e "item_rate_common: ${RATE_ITEM_DROP_COMMON}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_common_boss: ${RATE_ITEM_DROP_COMMON}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_common_mvp: ${RATE_ITEM_DROP_COMMON}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_common_min: ${RATE_ITEM_DROP_COMMON}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_common_max: ${RATE_ITEM_DROP_COMMON}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
     if ! [ -z "${RATE_ITEM_DROP_HEAL}" ]; then
-        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal_boss: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal_mvp: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal_min: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal_max: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
+        echo -e "item_rate_heal: ${RATE_ITEM_DROP_HEAL}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_heal_boss: ${RATE_ITEM_DROP_HEAL}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_heal_mvp: ${RATE_ITEM_DROP_HEAL}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_heal_min: ${RATE_ITEM_DROP_HEAL}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_heal_max: ${RATE_ITEM_DROP_HEAL}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
     if ! [ -z "${RATE_ITEM_DROP_USABLE}" ]; then
-        sed -i "s/^\s*item_rate_usable:.*$/item_rate_usable: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_usable_boss:.*$/item_rate_usable_boss: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_usable_mvp:.*$/item_rate_usable_mvp: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_usable_min:.*$/item_rate_usable_min: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_usable_max:.*$/item_rate_usable_max: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
+        echo -e "item_rate_usable: ${RATE_ITEM_DROP_USABLE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_usable_boss: ${RATE_ITEM_DROP_USABLE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_usable_mvp: ${RATE_ITEM_DROP_USABLE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_usable_min: ${RATE_ITEM_DROP_USABLE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_usable_max: ${RATE_ITEM_DROP_USABLE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
     if ! [ -z "${RATE_ITEM_DROP_EQUIP}" ]; then
-        sed -i "s/^\s*item_rate_equip:.*$/item_rate_equip: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_equip_boss:.*$/item_rate_equip_boss: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_equip_mvp:.*$/item_rate_equip_mvp: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_equip_min:.*$/item_rate_equip_min: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_equip_max:.*$/item_rate_equip_max: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
+        echo -e "item_rate_equip: ${RATE_ITEM_DROP_EQUIP}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_equip_boss: ${RATE_ITEM_DROP_EQUIP}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_equip_mvp: ${RATE_ITEM_DROP_EQUIP}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_equip_min: ${RATE_ITEM_DROP_EQUIP}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_equip_max: ${RATE_ITEM_DROP_EQUIP}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
     if ! [ -z "${RATE_ITEM_DROP_CARD}" ]; then
-        sed -i "s/^\s*item_rate_card:.*$/item_rate_card: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_card_boss:.*$/item_rate_card_boss: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_card_mvp:.*$/item_rate_card_mvp: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_card_min:.*$/item_rate_card_min: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_card_max:.*$/item_rate_card_max: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
+        echo -e "item_rate_card: ${RATE_ITEM_DROP_CARD}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_card_boss: ${RATE_ITEM_DROP_CARD}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_card_mvp: ${RATE_ITEM_DROP_CARD}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_card_min: ${RATE_ITEM_DROP_CARD}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_card_max: ${RATE_ITEM_DROP_CARD}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
     if ! [ -z "${RATE_ITEM_DROP_MISC}" ]; then
-        sed -i "s/^\s*item_rate_misc:.*$/item_rate_misc: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_misc_boss:.*$/item_rate_misc_boss: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_misc_mvp:.*$/item_rate_misc_mvp: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_misc_min:.*$/item_rate_misc_min: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_misc_max:.*$/item_rate_misc_max: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
+        echo -e "item_rate_misc: ${RATE_ITEM_DROP_MISC}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_misc_boss: ${RATE_ITEM_DROP_MISC}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_misc_mvp: ${RATE_ITEM_DROP_MISC}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_misc_min: ${RATE_ITEM_DROP_MISC}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_misc_max: ${RATE_ITEM_DROP_MISC}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
     if ! [ -z "${RATE_ITEM_DROP_TREASURE}" ]; then
-        sed -i "s/^\s*item_rate_treasure:.*$/item_rate_treasure: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_treasure_boss:.*$/item_rate_treasure_boss: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_treasure_mvp:.*$/item_rate_treasure_mvp: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_treasure_min:.*$/item_rate_treasure_min: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
-        sed -i "s/^\s*item_rate_treasure_max:.*$/item_rate_treasure_max: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
+        echo -e "item_rate_treasure: ${RATE_ITEM_DROP_TREASURE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_treasure_boss: ${RATE_ITEM_DROP_TREASURE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_treasure_mvp: ${RATE_ITEM_DROP_TREASURE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_treasure_min: ${RATE_ITEM_DROP_TREASURE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+        echo -e "item_rate_treasure_max: ${RATE_ITEM_DROP_TREASURE}" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
     fi
 }
 
-#PUBLICIP=$(dig +short myip.opendns.com @resolver1.opendns.com)
+setup_extras () {
+    echo "Configuring extra configs"
+    # https://rathena.github.io/user-guides/configuration/imports/
 
-cd /rAthena
+    # hide all error messages
+    echo -e "console_msg_log: 0" >> "$RATHENA_DIR/conf/import/map_conf.txt"
+    echo -e "console_silent: 16" >> "$RATHENA_DIR/conf/import/map_conf.txt"
+
+    
+    # log all items and all chat messages.
+    echo -e "log_filter: 1" >> "$RATHENA_DIR/conf/import/log_conf.txt"
+    echo -e "log_chat: 63" >> "$RATHENA_DIR/conf/import/log_conf.txt"
+
+    # mail box status is displayed upon login when there are unread mails
+    echo -e "mail_show_status: 2" >> "$RATHENA_DIR/conf/import/battle_conf.txt"
+}
 
 setup_init
 
