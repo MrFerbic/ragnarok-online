@@ -1,83 +1,100 @@
-version: "3.9"
+  version: "3.9"
 
-services:
-  db:
-    image: mariadb:10.6
-    container_name: ragnarok-online-mariadb
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: ragnarok
-      MYSQL_DATABASE: ragnarok
-      MYSQL_USER: ragnarok
-      MYSQL_PASSWORD: ragnarok
-    volumes:
-      - /home/decky/Documents/works/others/ragnarok-online/mariadb:/var/lib/mysql
-    networks:
-      - ragnarok-online
+  services:
+    db:
+      image: mariadb:10.6
+      container_name: ragnarok-online-mariadb
+      restart: always
+      environment:
+        - MYSQL_ROOT_PASSWORD=ragnarok
+        - MYSQL_DATABASE=ragnarok
+        - MYSQL_USER=ragnarok
+        - MYSQL_PASSWORD=ragnarok
+      volumes:
+        - /home/decky/Documents/works/others/ragnarok-online/mariadb:/var/lib/mysql
+      networks:
+        - ragnarok-online
 
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    container_name: ragnarok-online-phpmyadmin
-    environment:
-      PMA_HOST: db
-      MYSQL_ROOT_PASSWORD: ragnarok
-    ports:
-      - "5124:80"
-    depends_on:
-      - db
-    networks:
-      - ragnarok-online
+    phpmyadmin:
+      image: phpmyadmin/phpmyadmin
+      container_name: ragnarok-online-phpmyadmin
+      environment:
+        PMA_HOST: db
+        MYSQL_ROOT_PASSWORD: ragnarok
+      ports:
+        - "5124:80"
+      depends_on:
+        - db
+      networks:
+        - ragnarok-online
 
-  fluxcp:
-    image: fluxcp:0.0.1
-    container_name: ragnarok-online-fluxcp
-    ports:
-      - "5123:80"
-    environment:
-      - MYSQL_HOST=db
-      - MYSQL_DB=ragnarok
-      - MYSQL_USER=ragnarok
-      - MYSQL_PWD=ragnarok
-      - FLUXCP_HOST=192.168.0.102
-      - FLUXCP_INSTALLER_PASSWORD=ragnarok
-    depends_on:
-      - db
-      - phpmyadmin
-    networks:
-      - ragnarok-online
+    fluxcp:
+      image: fluxcp:0.0.1
+      container_name: ragnarok-online-fluxcp
+      ports:
+        - "5123:80"
+      environment:
+        - MYSQL_HOST=db
+        - MYSQL_DB=ragnarok
+        - MYSQL_USER=ragnarok
+        - MYSQL_PWD=ragnarok
+        - FLUXCP_HOST=192.168.0.102
+        - FLUXCP_INSTALLER_PASSWORD=ragnarok
+      depends_on:
+        - db
+        - phpmyadmin
+      volumes:
+        - /home/decky/Documents/works/others/ragnarok-online/fluxcp/cache:/cache
+      networks:
+        - ragnarok-online
 
-  rathena:
-    image: rathena:0.0.1
-    container_name: ragnarok-online-rathena
-    depends_on:
-      - fluxcp
-      - phpmyadmin
-      - db
-    environment:
-      - MYSQL_HOST=db
-      - MYSQL_DB=ragnarok
-      - MYSQL_USER=ragnarok
-      - MYSQL_PWD=ragnarok
-      - MYSQL_DROP_DB=0
-      - BIND_IP=0.0.0.0
-      - SET_INTERSRV_USERID=ragnarok
-      - SET_INTERSRV_PASSWD=ragnarok
-      - SET_SERVER_NAME=TestServer
-      - SET_CHAR_TO_LOGIN_IP=192.168.0.102
-      - SET_CHAR_PUBLIC_IP=192.168.0.102
-      - SET_MAP_TO_CHAR_IP=192.168.0.102
-      - SET_MAP_PUBLIC_IP=192.168.0.102
-    ports:
-      - "6900:6900"
-      - "6121:6121"
-      - "5121:5121"
-      - "5122:8888"
-    volumes:
-      - /home/decky/Documents/works/others/ragnarok-online/rathena/data:/data
-    networks:
-      - ragnarok-online
-volumes:
-  db_data:
+    rathena:
+      image: rathena:0.0.1
+      container_name: ragnarok-online-rathena
+      depends_on:
+        - fluxcp
+        - phpmyadmin
+        - db
+      environment:
+        - MYSQL_HOST=db
+        - MYSQL_DB=ragnarok
+        - MYSQL_USER=ragnarok
+        - MYSQL_PWD=ragnarok
+        - MYSQL_DROP_DB=0
+        - BIND_IP=0.0.0.0
+        - SET_INTERSRV_USERID=ragnarok
+        - SET_INTERSRV_PASSWD=ragnarok
+        - SET_CHAR_TO_LOGIN_IP=192.168.0.102
+        - SET_CHAR_PUBLIC_IP=192.168.0.102
+        - SET_MAP_TO_CHAR_IP=192.168.0.102
+        - SET_MAP_PUBLIC_IP=192.168.0.102
 
-networks:
-  ragnarok-online:
+        - SET_SERVER_NAME=TestServer
+
+        - RATHENA_PACKETVER=20220406
+
+        - RATE_BASE_EXP=100
+        - RATE_JOB_EXP=100
+        - ENABLE_MULTI_LEVEL_UP=1
+        - RATE_ITEM_DROP_COMMON=100
+        - RATE_ITEM_DROP_HEAL=100
+        - RATE_ITEM_DROP_USABLE=100
+        - RATE_ITEM_DROP_EQUIP=50
+        - RATE_ITEM_DROP_CARD=1
+        - RATE_ITEM_DROP_MISC=50
+        - RATE_ITEM_DROP_TREASURE=20
+      ports:
+        - "6900:6900"
+        - "6121:6121"
+        - "5121:5121"
+        - "5122:8888"
+      volumes:
+        - /home/decky/Documents/works/others/ragnarok-online/rathena/cache:/cache
+      networks:
+        - ragnarok-online
+  volumes:
+    db_data:
+
+  networks:
+    ragnarok-online:
+      driver: bridge

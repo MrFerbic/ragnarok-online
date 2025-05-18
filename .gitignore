@@ -1,4 +1,5 @@
 .env
 !mariadb/readme.txt
 mariadb/*
-rathena/data/.built
+rathena/cache/*
+fluxcp/cache/*

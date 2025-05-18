@@ -16,14 +16,18 @@ done
 echo "MySQL is up - continuing..."
 
 # ------------------------------------------------------
-# Build Phase (only once)
+# Build Phase
 # ------------------------------------------------------
-cd /rAthena
+RATHENA_DIR="/rAthena"
+BUILT_DIR="/cache"
 
-if [ ! -f /data/.built ]; then
-    echo "Building rAthena server from source..."
+# Check if /cache is empty
+if [ -z "$(ls -A "$BUILT_DIR")" ]; then
+    echo "🛠️ First time setup: building rAthena..."
 
-    PACKETVER=20220406
+    # Place your rAthena build commands here
+    cd "$RATHENA_DIR"
+
     PACKET_OBFUSCATION=1
 
     if [ ${PACKET_OBFUSCATION} -neq 1 ]; then sed -i "s|#define PACKET_OBFUSCATION|//#define PACKET_OBFUSCATION|g" /rAthena/src/config/packets.hpp; fi
@@ -31,15 +35,13 @@ if [ ! -f /data/.built ]; then
 
     # Find where the libmysqlclient.so installed
     MYSQL_LIB_PATH=$(dpkg -S libmysqlclient.so | awk '{print $2}')
-    ./configure  --enable-packetver=${PACKETVER} --enable-64bit --with-MYSQL_LIBS="$MYSQL_LIB_PATH"
+    ./configure  --enable-packetver=${RATHENA_PACKETVER} --enable-64bit --with-MYSQL_LIBS="$MYSQL_LIB_PATH"
     make clean
     make server
     chmod a+x login-server char-server map-server web-server
-
-    # Mark as built to prevent rebuilding
-    touch /data/.built
 else
-    echo "rAthena already built, skipping build step."
+    echo "♻️ Cached build found, restoring from $BUILT_DIR to $RATHENA_DIR"
+    cp -rT "$BUILT_DIR" "$RATHENA_DIR"
 fi
 # ------------------------------------------------------
 
@@ -77,6 +79,10 @@ setup_init () {
     setup_mysql_config
     setup_config
     enable_custom_npc
+    setup_rate
+
+    echo "📦 Caching build output to $BUILT_DIR"
+    cp -rT "$RATHENA_DIR" "$BUILT_DIR"
 }
 
 import_sql_files_in_order () {
@@ -221,6 +227,72 @@ setup_config () {
 
 enable_custom_npc () {
     echo -e "npc: npc/custom/gab_npc.txt" >> /rAthena/npc/scripts_custom.conf
+}
+
+setup_rate () {
+    echo "Configuring server rates..."
+
+    # EXP rates
+    if ! [ -z "${RATE_BASE_EXP}" ]; then
+        sed -i "s/^\s*base_exp_rate:.*$/base_exp_rate: ${RATE_BASE_EXP}/" /rAthena/conf/battle/exp.conf
+    fi
+    if ! [ -z "${RATE_JOB_EXP}" ]; then
+        sed -i "s/^\s*job_exp_rate:.*$/job_exp_rate: ${RATE_JOB_EXP}/" /rAthena/conf/battle/exp.conf
+    fi
+    if ! [ -z "${ENABLE_MULTI_LEVEL_UP}" ]; then
+        sed -i "s/^\s*multi_level_up:.*$/multi_level_up: ${ENABLE_MULTI_LEVEL_UP}/" /rAthena/conf/battle/exp.conf
+    fi
+
+    # Drop rates
+    if ! [ -z "${RATE_ITEM_DROP_COMMON}" ]; then
+        sed -i "s/^\s*item_rate_common:.*$/item_rate_common: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_common_boss:.*$/item_rate_common_boss: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_common_mvp:.*$/item_rate_common_mvp: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_common_min:.*$/item_rate_common_min: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_common_max:.*$/item_rate_common_max: ${RATE_ITEM_DROP_COMMON}/" /rAthena/conf/battle/drops.conf
+    fi
+    if ! [ -z "${RATE_ITEM_DROP_HEAL}" ]; then
+        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal_boss: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal_mvp: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal_min: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_heal:.*$/item_rate_heal_max: ${RATE_ITEM_DROP_HEAL}/" /rAthena/conf/battle/drops.conf
+    fi
+    if ! [ -z "${RATE_ITEM_DROP_USABLE}" ]; then
+        sed -i "s/^\s*item_rate_usable:.*$/item_rate_usable: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_usable_boss:.*$/item_rate_usable_boss: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_usable_mvp:.*$/item_rate_usable_mvp: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_usable_min:.*$/item_rate_usable_min: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_usable_max:.*$/item_rate_usable_max: ${RATE_ITEM_DROP_USABLE}/" /rAthena/conf/battle/drops.conf
+    fi
+    if ! [ -z "${RATE_ITEM_DROP_EQUIP}" ]; then
+        sed -i "s/^\s*item_rate_equip:.*$/item_rate_equip: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_equip_boss:.*$/item_rate_equip_boss: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_equip_mvp:.*$/item_rate_equip_mvp: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_equip_min:.*$/item_rate_equip_min: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_equip_max:.*$/item_rate_equip_max: ${RATE_ITEM_DROP_EQUIP}/" /rAthena/conf/battle/drops.conf
+    fi
+    if ! [ -z "${RATE_ITEM_DROP_CARD}" ]; then
+        sed -i "s/^\s*item_rate_card:.*$/item_rate_card: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_card_boss:.*$/item_rate_card_boss: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_card_mvp:.*$/item_rate_card_mvp: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_card_min:.*$/item_rate_card_min: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_card_max:.*$/item_rate_card_max: ${RATE_ITEM_DROP_CARD}/" /rAthena/conf/battle/drops.conf
+    fi
+    if ! [ -z "${RATE_ITEM_DROP_MISC}" ]; then
+        sed -i "s/^\s*item_rate_misc:.*$/item_rate_misc: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_misc_boss:.*$/item_rate_misc_boss: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_misc_mvp:.*$/item_rate_misc_mvp: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_misc_min:.*$/item_rate_misc_min: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_misc_max:.*$/item_rate_misc_max: ${RATE_ITEM_DROP_MISC}/" /rAthena/conf/battle/drops.conf
+    fi
+    if ! [ -z "${RATE_ITEM_DROP_TREASURE}" ]; then
+        sed -i "s/^\s*item_rate_treasure:.*$/item_rate_treasure: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_treasure_boss:.*$/item_rate_treasure_boss: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_treasure_mvp:.*$/item_rate_treasure_mvp: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_treasure_min:.*$/item_rate_treasure_min: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
+        sed -i "s/^\s*item_rate_treasure_max:.*$/item_rate_treasure_max: ${RATE_ITEM_DROP_TREASURE}/" /rAthena/conf/battle/drops.conf
+    fi
 }
 
 #PUBLICIP=$(dig +short myip.opendns.com @resolver1.opendns.com)
