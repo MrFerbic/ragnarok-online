@@ -137,22 +137,40 @@ setup_init () {
     setup_extras
 }
 
-import_sql_files_in_order () {
-    BASE_DIR="$1"
-    echo "Importing SQL files from ${BASE_DIR} (top-down order, skipping 'tools')..."
+import_sql_file() {
+    TARGET_PATH="$1"
+    ALLOW_FAIL="${2:-false}"  # default: do not allow failures
 
-    # 1. Import SQL files directly inside the base directory
-    find "${BASE_DIR}" -maxdepth 1 -type f -name "*.sql" | sort | while read -r SQL_FILE; do
-        echo "Importing $SQL_FILE"
-        mysql -u"${MYSQL_USER}" -p"${MYSQL_PWD}" -h "${MYSQL_HOST}" -D"${MYSQL_DB}" < "$SQL_FILE"
-    done
+    if [[ -z "$TARGET_PATH" ]]; then
+        echo "❌ No path provided to inject_sql"
+        return 1
+    fi
 
-    # 2. Recursively import from subdirectories, sorted, but skip the 'tools' directory
-    #find "${BASE_DIR}" -mindepth 2 -type f -name "*.sql" \
-    #    ! -path "${BASE_DIR}/tools/*" | sort | while read -r SQL_FILE; do
-    #    echo "Importing $SQL_FILE"
-    #    mysql -u"${MYSQL_USER}" -p"${MYSQL_PWD}" -h "${MYSQL_HOST}" -D"${MYSQL_DB}" < "$SQL_FILE"
-    #done
+    run_sql_file() {
+        local FILE="$1"
+        echo "➡️  Injecting: $FILE"
+
+        if ! mysql -u"${MYSQL_USER}" -p"${MYSQL_PWD}" -h "${MYSQL_HOST}" -D"${MYSQL_DB}" < "$FILE"; then
+            if [[ "$ALLOW_FAIL" == "true" ]]; then
+                echo "⚠️  Failed to inject $FILE — continuing due to ALLOW_FAIL=true"
+            else
+                echo "❌ Failed to inject $FILE — aborting (ALLOW_FAIL=false)"
+                return 1
+            fi
+        fi
+    }
+
+    if [[ -f "$TARGET_PATH" && "$TARGET_PATH" == *.sql ]]; then
+        run_sql_file "$TARGET_PATH" || return 1
+    elif [[ -d "$TARGET_PATH" ]]; then
+        echo "📁 Injecting all SQL files in directory: $TARGET_PATH (non-recursive, sorted)"
+        find "$TARGET_PATH" -maxdepth 1 -type f -name "*.sql" | sort | while read -r SQL_FILE; do
+            run_sql_file "$SQL_FILE" || [[ "$ALLOW_FAIL" == "true" ]] || return 1
+        done
+    else
+        echo "⚠️ Invalid target path or not an .sql file: $TARGET_PATH"
+        return 1
+    fi
 }
 
 setup_mysql_config () {
@@ -214,15 +232,26 @@ setup_mysql_config () {
 
         mysql -u"${MYSQL_USER}" -p"${MYSQL_PWD}" -h "${MYSQL_HOST}" -e "CREATE DATABASE IF NOT EXISTS \`${MYSQL_DB}\`;"
 
-        # Import each section in order
-        import_sql_files_in_order "$RATHENA_DIR/sql-files"
+        # Import main database data
+        import_sql_file "$RATHENA_DIR/sql-files" false # Fail on any error
 
+        # Import upgrade data
+        import_sql_file "$RATHENA_DIR/sql-files/upgrades" true # Continue on errors
 
+        # Import compability data
+        import_sql_file "$RATHENA_DIR/sql-files/compatibility" true # Continue on errors
+
+        # Update 1st account, this seems is a system account it is unusable, but required by server
         mysql -u${MYSQL_USER} -p${MYSQL_PWD} -h ${MYSQL_HOST} -D${MYSQL_DB} -e "UPDATE login SET userid = \"${SET_INTERSRV_USERID}\", user_pass = \"${SET_INTERSRV_PASSWD}\", group_id = 99 WHERE account_id = 1;"
-        
+
+        # execute the accountsandchars.sql so GM and bot accounts get precreated in the database.
+        MYSQL_ACCOUNTSANDCHARS=1
         if ! [ -z "${MYSQL_ACCOUNTSANDCHARS}" ]; then
-            mysql -u${MYSQL_USER} -p${MYSQL_PWD} -h ${MYSQL_HOST} -D${MYSQL_DB} < /accountsandchars.sql
+            import_sql_file "/setup/accountsandchars.sql" true
         fi
+
+        # First account
+        import_sql_file "/setup/firstaccount.sql" true
     fi
 }
 

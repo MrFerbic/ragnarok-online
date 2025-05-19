@@ -19,6 +19,7 @@ RUN mkdir -p /setup
 WORKDIR /setup
 
 COPY accountsandchars.sql /setup
+COPY firstaccount.sql /setup
 COPY gab_npc.txt /setup
 COPY docker-entrypoint.sh /setup
 COPY start-server.sh /setup
