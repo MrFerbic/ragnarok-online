@@ -163,14 +163,4 @@ VALUES (2000000, 'admin', 'admin123', 'F', 'admin@athena.com', 99, 0, 0, 0, 5, N
 
 ---
 
-## 📌 Observações
-
-Se desejar, este projeto pode ser estendido com:
-
-- Script para importar SQLs automaticamente no primeiro boot  
-- Versão bilíngue (EN/PT-BR) do README  
-- Documentação para contribuição (`CONTRIBUTING.md`)
-
----
-
 Feito com ❤️ por [MrFerbic](https://github.com/MrFerbic)
