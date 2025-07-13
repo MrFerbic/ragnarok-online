@@ -1,89 +1,96 @@
-version: "3.9"
+version: "3.9"  # Versão do Docker Compose
 
 services:
+  # 🐬 MariaDB: Banco de dados do servidor Ragnarok
   db:
-    image: mariadb:10.6
-    container_name: ragnarok-online-mariadb
+    image: mariadb:10.11  # Última LTS estável, compatível com produção
+    container_name: easyro-mariadb
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-ragnarok}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-ragnarok}
-      MYSQL_USER: ${MYSQL_USER:-ragnarok}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ragnarok}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}  # Definido no .env
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - ${DB_VOLUME:-./mariadb}:/var/lib/mysql
+      - ${DB_VOLUME:-./mariadb}:/var/lib/mysql  # Persistência dos dados
     networks:
-      - ragnarok-online
+      - easyro-network
 
+  # 🧪 phpMyAdmin: Interface web para gerenciar o banco
   phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    container_name: ragnarok-online-phpmyadmin
+    image: phpmyadmin:5.2-apache  # Compatível com ARM64 (Ampere, Apple M1/M2)
+    container_name: easyro-phpmyadmin
     environment:
       PMA_HOST: ${MYSQL_HOST:-db}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-ragnarok}
+      PMA_USER: ${MYSQL_USER}
+      PMA_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "${PHPMYADMIN_PORT:-5124}:80"
+      - "${PHPMYADMIN_PORT:-5124}:80"  # Ex.: http://localhost:5124
     depends_on:
       - db
     networks:
-      - ragnarok-online
+      - easyro-network
 
+  # 🌐 FluxCP: Painel de administração via navegador
   fluxcp:
-    image: fluxcp:0.0.1
-    container_name: ragnarok-online-fluxcp
+    image: fluxcp:0.0.1  # Imagem customizada local
+    container_name: easyro-fluxcp
     ports:
-      - "${FLUXCP_PORT:-5123}:80"
+      - "${FLUXCP_PORT:-5123}:80"  # Ex.: http://localhost:5123
     environment:
       HOST_UID: ${HOST_UID:-1000}
       HOST_GID: ${HOST_GID:-1000}
 
       MYSQL_HOST: ${MYSQL_HOST:-db}
-      MYSQL_DB: ${MYSQL_DATABASE:-ragnarok}
-      MYSQL_USER: ${MYSQL_USER:-ragnarok}
-      MYSQL_PWD: ${MYSQL_PASSWORD:-ragnarok}
-      
-      FLUXCP_HOST: ${FLUXCP_HOST:-127.0.0.1}
-      FLUXCP_INSTALLER_PASSWORD: ${FLUXCP_INSTALLER_PASSWORD:-ragnarok}
+      MYSQL_DB: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PWD: ${MYSQL_PASSWORD}
+
+      FLUXCP_HOST: ${PUBLIC_IP}  # IP externo da máquina, definido no .env
+      FLUXCP_INSTALLER_PASSWORD: ${FLUXCP_INSTALLER_PASSWORD}  # Protege a instalação
     depends_on:
       - db
-      - phpmyadmin
     volumes:
-      - ${FLUXCP_PATH:-./fluxcp/server}:/var/www/html
+      - ${FLUXCP_PATH:-./fluxcp/server}:/var/www/html  # Código-fonte do FluxCP
     networks:
-      - ragnarok-online
+      - easyro-network
 
+  # 🎮 rAthena: Servidor do jogo Ragnarok Online
   rathena:
-    image: rathena:0.0.1
-    container_name: ragnarok-online-rathena
+    image: rathena:0.0.1  # Imagem customizada local com build automatizado
+    container_name: easyro-rathena
     depends_on:
       - fluxcp
       - phpmyadmin
       - db
     environment:
-      RATHENA_REPO_URL: ${RATHENA_REPO_URL:-https://github.com/rathena/rathena.git}
+      RATHENA_REPO_URL: ${RATHENA_REPO_URL}
       RATHENA_BRANCH: ${RATHENA_BRANCH:-master}
       RATHENA_COMMIT: ${RATHENA_COMMIT}
       HOST_UID: ${HOST_UID:-1000}
       HOST_GID: ${HOST_GID:-1000}
 
       MYSQL_HOST: ${MYSQL_HOST:-db}
-      MYSQL_DB: ${MYSQL_DATABASE:-ragnarok}
-      MYSQL_USER: ${MYSQL_USER:-ragnarok}
-      MYSQL_PWD: ${MYSQL_PASSWORD:-ragnarok}
-      MYSQL_DROP_DB: ${MYSQL_DROP_DB:-0}
-      BIND_IP: ${BIND_IP:-0.0.0.0}
+      MYSQL_DB: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PWD: ${MYSQL_PASSWORD}
+      MYSQL_DROP_DB: ${MYSQL_DROP_DB:-0}  # 1 = força reset do banco ao subir
 
-      SET_INTERSRV_USERID: ${SET_INTERSRV_USERID:-ragnarok}
-      SET_INTERSRV_PASSWD: ${SET_INTERSRV_PASSWD:-ragnarok}
+      BIND_IP: ${BIND_IP:-0.0.0.0}  # Aceita conexões externas
 
-      SET_CHAR_TO_LOGIN_IP: ${SET_CHAR_TO_LOGIN_IP:-127.0.0.1}
-      SET_CHAR_PUBLIC_IP: ${SET_CHAR_PUBLIC_IP:-127.0.0.1}
-      SET_MAP_TO_CHAR_IP: ${SET_MAP_TO_CHAR_IP:-127.0.0.1}
-      SET_MAP_PUBLIC_IP: ${SET_MAP_PUBLIC_IP:-127.0.0.1}
+      # IPs de conexão entre os servidores (login/char/map)
+      SET_INTERSRV_USERID: ${SET_INTERSRV_USERID}
+      SET_INTERSRV_PASSWD: ${SET_INTERSRV_PASSWD}
+      SET_CHAR_TO_LOGIN_IP: ${PUBLIC_IP}
+      SET_CHAR_PUBLIC_IP: ${PUBLIC_IP}
+      SET_MAP_TO_CHAR_IP: ${PUBLIC_IP}
+      SET_MAP_PUBLIC_IP: ${PUBLIC_IP}
 
-      SET_SERVER_NAME: ${SET_SERVER_NAME:-TestServer}
+      # Configurações do servidor
+      SET_SERVER_NAME: ${SET_SERVER_NAME:-EasyRO}
       RATHENA_PACKETVER: ${RATHENA_PACKETVER:-20220406}
 
+      # Rates e regras do jogo
       RATE_BASE_EXP: ${RATE_BASE_EXP:-100}
       RATE_JOB_EXP: ${RATE_JOB_EXP:-100}
       ENABLE_MULTI_LEVEL_UP: ${ENABLE_MULTI_LEVEL_UP:-1}
@@ -95,18 +102,20 @@ services:
       RATE_ITEM_DROP_MISC: ${RATE_ITEM_DROP_MISC:-50}
       RATE_ITEM_DROP_TREASURE: ${RATE_ITEM_DROP_TREASURE:-20}
     ports:
-      - "${PORT_LOGIN:-6900}:6900"
-      - "${PORT_CHAR:-6121}:6121"
-      - "${PORT_MAP:-5121}:5121"
-      - "${PORT_STATS:-5122}:8888"
+      - "${PORT_LOGIN:-6900}:6900"  # Porta do login-server
+      - "${PORT_CHAR:-6121}:6121"   # Porta do char-server
+      - "${PORT_MAP:-5121}:5121"    # Porta do map-server
+      - "${PORT_STATS:-5122}:8888"  # Porta opcional para estatísticas/debug
     volumes:
       - ${RATHENA_PATH:-./rathena/server}:/rAthena
     networks:
-      - ragnarok-online
+      - easyro-network
 
+# Volume para persistência do banco
 volumes:
   db_data:
 
+# Rede isolada entre os serviços
 networks:
-  ragnarok-online:
+  easyro-network:
     driver: bridge
