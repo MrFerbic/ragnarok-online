@@ -7,6 +7,8 @@ Bem-vindo ao **Easy RO Docker**, um ambiente completo e containerizado para serv
 - 🕹️ Painel de controle web FluxCP  
 - 🧪 phpMyAdmin para acesso fácil ao banco de dados
 
+> 🛠️ **Reestruturado e adaptado para ARM64**: Este projeto foi repensado a partir do [repositório original](https://github.com/deckyfx/ragnarok-online) de deckyfx, com foco em compatibilidade total para arquiteturas ARM64 — como processadores **Ampere Altra**, amplamente utilizados em **VMs da Oracle Cloud**, além de **Raspberry Pi 4/5** e **Apple M1/M2**.
+
 ---
 
 ## 🖼️ Prévia
@@ -160,7 +162,18 @@ VALUES (2000000, 'admin', 'admin123', 'F', 'admin@athena.com', 99, 0, 0, 0, 5, N
 - [FluxCP](https://github.com/rathena/FluxCP)
 - [phpMyAdmin](https://www.phpmyadmin.net/)
 - [Docker](https://www.docker.com/)
+- [deckyfx/ragnarok-online](https://github.com/deckyfx/ragnarok-online)
 
 ---
 
-Feito com ❤️ por [MrFerbic](https://github.com/MrFerbic)
+## 📌 Observações
+
+Este projeto pode ser estendido com:
+
+- Script de instalação automática do banco para o FluxCP  
+- Suporte a múltiplas línguas  
+- Deploy em serviços como Oracle Cloud, AWS Graviton, Raspberry Pi etc.
+
+---
+
+Feito com ❤️ no Brasil por [MrFerbic](https://github.com/MrFerbic)
