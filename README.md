@@ -27,7 +27,7 @@ Make sure you have the **latest version of Docker** and Docker Compose:
 ### 2. 🧬 Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/easy-ro-docker.git
+git clone https://github.com/MrFerbic/ragnarok-online.git
 cd easy-ro-docker
 ```
 
