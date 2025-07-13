@@ -28,7 +28,7 @@ Make sure you have the **latest version of Docker** and Docker Compose:
 
 ```bash
 git clone https://github.com/MrFerbic/ragnarok-online.git
-cd easy-ro-docker
+cd ragnarok-online
 ```
 
 ### 3. 🛠️ Build Docker Images
@@ -84,7 +84,7 @@ docker compose build --no-cache
 📁 Folder Structure
 
 ```text
-easy-ro-docker/
+ragnarok-online/
 ├── rathena/             # Custom rAthena image & cache
 ├── fluxcp/              # FluxCP panel image & config
 ├── mariadb/             # MySQL data volume
